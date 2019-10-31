@@ -1,0 +1,86 @@
+---
+title: "Checking out Broom Vignette"
+author: "Hamish Spalding"
+date: "31/10/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+install.packages("pacman")
+pacman::p_load(tidyverse)
+```
+
+
+## Intro to Broom
+
+Following Intro to Broom at this link:
+<https://cran.r-project.org/web/packages/broom/vignettes/broom.html>
+
+**broom** package description is that "broom Converts Statistical Nalysis Objects into TIdy Tibbles."  
+
+**broom use**s mpg data, so maybe try follow example with wome some different data. Iris is too common.   
+
+```{r}
+#Get some data from here - requires registration
+#https://opendata.transport.nsw.gov.au/dataset/train-occupancy-nov-2016-feb-2017
+
+
+```
+
+
+#Get some data from here - requires registration
+https://opendata.transport.nsw.gov.au/dataset/train-occupancy-nov-2016-feb-2017
+
+upload .csv to spark
+
+```{r}
+pacman::p_load(SparkR,SparkR)
+
+SparkR::sparkR.session() # https://docs.databricks.com/spark/latest/sparkr/rstudio.html#get-started-with-rstudio-server-open-source
+library(sparklyr)
+sc <- spark_connect(method = "databricks")
+src_tbls(sc)
+
+TrainOccupancyFeb2017 <- readr::read_csv("Train Occupancy - Feb 2017.csv", # C:\Users\hspalding\Downloads\Train Occupancy - Feb 2017
+                                         col_types = cols(                 # need to save above file - too large for github - 1.1m rows..
+                                           day = col_double(),
+                                           Actual.Stop.Station = col_character(),
+                                           Actual.Station.Arrv.Time = col_datetime(format = ""),
+                                           Actual.Station.Dprt.Time = col_datetime(format = ""),
+                                           Segment.Direction = col_character(),
+                                           Trip.Name = col_character(),
+                                           Service.Line = col_character(),
+                                           Orig..Station = col_character(),
+                                           Dest..Station = col_character(),
+                                           Leading.Set.Type = col_character(),
+                                           Node.Seq.Order = col_double(),
+                                           Actual.Station.Dprt.Time.Band = col_character(),
+                                           `Occupancy Status` = col_character(),
+                                           `Occupancy Range` = col_character())
+)
+                                        
+src_tbls(sc)
+sparklyr::copy_to(sc, TrainOccupancyFeb2017)
+
+
+glimpse(TrainOccupancyFeb2017)
+
+sparklyr::sdf_copy_to(sc,TrainOccupancyFeb2017, overwrite = TRUE)
+
+# create a reference to the spark data TrainOccupancyFeb2017_csv using the dplyr::tbl() function
+TrainOccupancyFeb2017_csv_tbl <- dplyr::tbl(sc,"TrainOccupancyFeb2017_csv")
+```
+
+
+src_tbls(sc)
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

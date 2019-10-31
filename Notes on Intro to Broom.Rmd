@@ -25,14 +25,14 @@ Following Intro to Broom at this link:
 #Get some data from here - requires registration
 #https://opendata.transport.nsw.gov.au/dataset/train-occupancy-nov-2016-feb-2017
 
-
 ```
 
 
-#Get some data from here - requires registration
+#Get some data from here - requires registration  
+
 https://opendata.transport.nsw.gov.au/dataset/train-occupancy-nov-2016-feb-2017
 
-upload .csv to spark
+upload .csv to R and then spark
 
 ```{r}
 pacman::p_load(SparkR,SparkR)
@@ -62,18 +62,54 @@ TrainOccupancyFeb2017 <- readr::read_csv("Train Occupancy - Feb 2017.csv", # C:\
                                         
 src_tbls(sc)
 sparklyr::copy_to(sc, TrainOccupancyFeb2017)
-
-
-glimpse(TrainOccupancyFeb2017)
-
-sparklyr::sdf_copy_to(sc,TrainOccupancyFeb2017, overwrite = TRUE)
+#sparklyr::sdf_copy_to(sc,TrainOccupancyFeb2017, overwrite = TRUE)
 
 # create a reference to the spark data TrainOccupancyFeb2017_csv using the dplyr::tbl() function
-TrainOccupancyFeb2017_csv_tbl <- dplyr::tbl(sc,"TrainOccupancyFeb2017_csv")
+TrainOccupancyFeb2017_csv_tbl <- dplyr::tbl(sc,"TrainOccupancyFeb2017")
+
+```
+
+```{r}
+TrainOccupancyFeb2017 %>% tally()
+
+origin <- unique(TrainOccupancyFeb2017$Orig..Station)
+origin.df <- as.data.frame(origin,col.names =c("station"))
+
+str(origin.df)
+
+
+
+dest <- unique(TrainOccupancyFeb2017$Dest..Station)
+dest.df <- as.data.frame(col.names =c("station"),dest)
+
+origin <-list(c("station"),origin)
+dest <-list(c("station"),dest)
+
+as.data.frame()
+comb <-list(origin, dest)
+
+as.data.frame(col.names =c("station"),origin)
+
+bind_rows(origin,dest) %>% tibble("stations")
+?bind_rows()
+
+
+```
+
+## get some BOM data
+
+```{r}
+if (!require("remotes")) {
+  install.packages("remotes", repos = "http://cran.rstudio.com/")
+  library("remotes")
+}
+
+install_github("ropensci/bomrang", build_vignettes = TRUE)
+
+library(bomrang)
 ```
 
 
-src_tbls(sc)
 
 ## Including Plots
 

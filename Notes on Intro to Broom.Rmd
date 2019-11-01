@@ -8,7 +8,9 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 install.packages("pacman")
-pacman::p_load(tidyverse)
+pacman::p_load(tidyverse, AzureStor,glue)
+key ="BNOTTHEREALKEYFORSTORAGE==" # set this and use with glue below. get from: Y:\Data\TfNSW\1_data\blob\train-occupancy-feb-2017.txt
+key="Xpvem==" #DELETED
 ```
 
 
@@ -32,66 +34,101 @@ Following Intro to Broom at this link:
 
 https://opendata.transport.nsw.gov.au/dataset/train-occupancy-nov-2016-feb-2017
 
-upload .csv to R and then spark
+-blob storage (need to paste correct key - see if can make data public - require TfNSW permission)
+-upload .csv to R and then spark
 
 ```{r}
-pacman::p_load(SparkR,SparkR)
+pacman::p_load(SparkR,sparklyr)
 
 SparkR::sparkR.session() # https://docs.databricks.com/spark/latest/sparkr/rstudio.html#get-started-with-rstudio-server-open-source
 library(sparklyr)
 sc <- spark_connect(method = "databricks")
 src_tbls(sc)
 
-TrainOccupancyFeb2017 <- readr::read_csv("Train Occupancy - Feb 2017.csv", # C:\Users\hspalding\Downloads\Train Occupancy - Feb 2017
-                                         col_types = cols(                 # need to save above file - too large for github - 1.1m rows..
-                                           day = col_double(),
-                                           Actual.Stop.Station = col_character(),
-                                           Actual.Station.Arrv.Time = col_datetime(format = ""),
-                                           Actual.Station.Dprt.Time = col_datetime(format = ""),
-                                           Segment.Direction = col_character(),
-                                           Trip.Name = col_character(),
-                                           Service.Line = col_character(),
-                                           Orig..Station = col_character(),
-                                           Dest..Station = col_character(),
-                                           Leading.Set.Type = col_character(),
-                                           Node.Seq.Order = col_double(),
-                                           Actual.Station.Dprt.Time.Band = col_character(),
-                                           `Occupancy Status` = col_character(),
-                                           `Occupancy Range` = col_character())
-)
-                                        
-src_tbls(sc)
-sparklyr::copy_to(sc, TrainOccupancyFeb2017)
-#sparklyr::sdf_copy_to(sc,TrainOccupancyFeb2017, overwrite = TRUE)
+##Access the blob storage
+bl_endp_key <- storage_endpoint("https://trainsriskdata.blob.core.windows.net/trains-ae-riskdiv-opaltrainoccupancy-test-csv", key={key})
+list_storage_containers(bl_endp_key) # $`trains-ae-riskdiv-opaltrainoccupancy-test-csv`
 
-# create a reference to the spark data TrainOccupancyFeb2017_csv using the dplyr::tbl() function
-TrainOccupancyFeb2017_csv_tbl <- dplyr::tbl(sc,"TrainOccupancyFeb2017")
+##Download files from lob storage
+
+library(AzureStor)
+#bl_endp_key <- storage_endpoint("https://mystorage.blob.core.windows.net", key="access_key")
+bl_endp_key <- AzureStor::storage_endpoint("https://trainsriskdata.blob.core.windows.net", key={key})
+AzureStor::list_storage_containers(bl_endp_key)
+# gives the containers:
+# $inputdata
+# $shem24092019
+# $`trains-ae-riskdiv-opaltrainoccupancy-test-csv`
+
+cont <- storage_container(bl_endp_key, "shem24092019")
+storage_download(cont, "/safety.csv", "~/htidymodels/safety.csv")
+
+safety <-readr::read_csv("~/htidymodels/safety.csv", col_types = cols(    #imports .csv to R dataframe
+  .default = col_character(),
+  `Incident Source System` = col_double(),
+  `Organisational Unit ID` = col_double(),
+  `Track Type` = col_double(),
+  Kilometrage = col_double(),
+  `Classification - Primary OC-G1 Code` = col_double(),
+  `Classification - Notifiable Occurrence Category` = col_double(),
+  `Near Miss` = col_character(), # are all NA so set to char()
+  HPI = col_character(), # are all NA so set to char()
+  `Review Responsible Person` = col_logical(),
+  `Review Person Name` = col_logical(),
+  `RCS - Internal Responsible Party Org. ID` = col_double(),
+  `Network Maint. - Rail Infrastructure Maintainer` = col_double(),
+  `Network Maint. - Primary Rail Infrastructure Manager` = col_double()
+))
+
+sparklyr::sdf_copy_to(sc,safety) # copies R object into spark.
+
+cont2 <- storage_container(bl_endp_key, "trains-ae-riskdiv-opaltrainoccupancy-test-csv")
+storage_download(cont2, "/train-occupancy-feb-2017.csv", "~/htidymodels/trains-ae-riskdiv-opaltrainoccupancy-test.csv")
+
+opaltrainoccupancy <- readr::read_csv("~/htidymodels/trains-ae-riskdiv-opaltrainoccupancy-test.csv", col_types = cols( 
+  day = col_double(),
+  Actual.Stop.Station = col_character(),
+  Actual.Station.Arrv.Time = col_datetime(format = ""),
+  Actual.Station.Dprt.Time = col_datetime(format = ""),
+  Segment.Direction = col_character(),
+  Trip.Name = col_character(),
+  Service.Line = col_character(),
+  Orig..Station = col_character(),
+  Dest..Station = col_character(),
+  Leading.Set.Type = col_character(),
+  Node.Seq.Order = col_double(),
+  Actual.Station.Dprt.Time.Band = col_character(),
+  `Occupancy Status` = col_character(),
+  `Occupancy Range` = col_character()
+)) #imports .csv to R dataframe
+
+sparklyr::sdf_copy_to(sc,opaltrainoccupancy) # copies R object into spark. Alternative: sparklyr::copy_to(sc, opaltrainoccupancy, overwrite = TRUE)
+
+
+
+src_tbls(sc)
+
+
+#####################################################
+
 
 ```
 
 ```{r}
-TrainOccupancyFeb2017 %>% tally()
+opaltrainoccupancy %>% tally()
 
-origin <- unique(TrainOccupancyFeb2017$Orig..Station)
-origin.df <- as.data.frame(origin,col.names =c("station"))
+origin <- unique(opaltrainoccupancy$Orig..Station)
+origin.df <- base::as.data.frame(origin) %>%
+  mutate(station=as.character(origin)) %>%
+  select(station)
 
-str(origin.df)
+dest <- unique(opaltrainoccupancy$Dest..Station)
+dest.df <- base::as.data.frame(dest) %>%
+  mutate(station=as.character(dest)) %>%
+  select(station)
 
-
-
-dest <- unique(TrainOccupancyFeb2017$Dest..Station)
-dest.df <- as.data.frame(col.names =c("station"),dest)
-
-origin <-list(c("station"),origin)
-dest <-list(c("station"),dest)
-
-as.data.frame()
-comb <-list(origin, dest)
-
-as.data.frame(col.names =c("station"),origin)
-
-bind_rows(origin,dest) %>% tibble("stations")
-?bind_rows()
+bind_rows(origin.df,dest.df) %>%
+  unique()
 
 
 ```
@@ -110,13 +147,8 @@ library(bomrang)
 ```
 
 
+##
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+Notes to follow up on
+https://spark.rstudio.com/
+https://www.r-bloggers.com/using-spark-from-r-for-performance-with-arbitrary-code-part-1-spark-sql-translation-custom-functions-and-arrow/

@@ -8,7 +8,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 install.packages("pacman")
-pacman::p_load(tidyverse, AzureStor,glue)
+pacman::p_load(tidyverse, AzureStor,glue, vroom)
 key ="BNOTTHEREALKEYFORSTORAGE==" # set this and use with glue below. get from: Y:\Data\TfNSW\1_data\blob\train-occupancy-feb-2017.txt
 key="Xpve==" #DELETED
 ```
@@ -63,7 +63,28 @@ AzureStor::list_storage_containers(bl_endp_key)
 cont <- storage_container(bl_endp_key, "shem24092019")
 storage_download(cont, "/safety.csv", "~/htidymodels/safety.csv")
 
+
+# try readr
 safety <-readr::read_csv("~/htidymodels/safety.csv", col_types = cols(    #imports .csv to R dataframe
+  .default = col_character(),
+  `Incident Source System` = col_double(),
+  `Organisational Unit ID` = col_double(),
+  `Track Type` = col_double(),
+  Kilometrage = col_double(),
+  `Classification - Primary OC-G1 Code` = col_double(),
+  `Classification - Notifiable Occurrence Category` = col_double(),
+  `Near Miss` = col_character(), # are all NA so set to char()
+  HPI = col_character(), # are all NA so set to char()
+  `Review Responsible Person` = col_logical(),
+  `Review Person Name` = col_logical(),
+  `RCS - Internal Responsible Party Org. ID` = col_double(),
+  `Network Maint. - Rail Infrastructure Maintainer` = col_double(),
+  `Network Maint. - Primary Rail Infrastructure Manager` = col_double()
+))
+
+# try vrooom
+
+safetyvroom <-vroom::vroom("~/htidymodels/safety.csv", col_types = cols(    #imports .csv to R dataframe
   .default = col_character(),
   `Incident Source System` = col_double(),
   `Organisational Unit ID` = col_double(),
@@ -114,6 +135,61 @@ src_tbls(sc)
 
 
 ```
+
+
+# rbanchmark
+
+```{r}
+
+library(pacman)
+p_load(rbenchmark)
+# try readr
+
+benchmark("readr" = {
+        
+      safety <-readr::read_csv("~/htidymodels/safety.csv", col_types = cols(    #imports .csv to R dataframe
+        .default = col_character(),
+        `Incident Source System` = col_double(),
+        `Organisational Unit ID` = col_double(),
+        `Track Type` = col_double(),
+        Kilometrage = col_double(),
+        `Classification - Primary OC-G1 Code` = col_double(),
+        `Classification - Notifiable Occurrence Category` = col_double(),
+        `Near Miss` = col_character(), # are all NA so set to char()
+        HPI = col_character(), # are all NA so set to char()
+        `Review Responsible Person` = col_logical(),
+        `Review Person Name` = col_logical(),
+        `RCS - Internal Responsible Party Org. ID` = col_double(),
+        `Network Maint. - Rail Infrastructure Maintainer` = col_double(),
+        `Network Maint. - Primary Rail Infrastructure Manager` = col_double()
+      ))
+                  },
+      "vroom" = {
+      # try vrooom
+      #install.packages("vroom")
+      library(vroom)
+      safetyvroom <-vroom::vroom("~/htidymodels/safety.csv", col_types = cols(    #imports .csv to R dataframe
+        .default = col_character(),
+        `Incident Source System` = col_double(),
+        `Organisational Unit ID` = col_double(),
+        `Track Type` = col_double(),
+        Kilometrage = col_double(),
+        `Classification - Primary OC-G1 Code` = col_double(),
+        `Classification - Notifiable Occurrence Category` = col_double(),
+        `Near Miss` = col_character(), # are all NA so set to char()
+        HPI = col_character(), # are all NA so set to char()
+        `Review Responsible Person` = col_logical(),
+        `Review Person Name` = col_logical(),
+        `RCS - Internal Responsible Party Org. ID` = col_double(),
+        `Network Maint. - Rail Infrastructure Maintainer` = col_double(),
+        `Network Maint. - Primary Rail Infrastructure Manager` = col_double()
+      ))
+      }
+)
+
+```
+
+
 
 ```{r}
 opaltrainoccupancy %>% tally()

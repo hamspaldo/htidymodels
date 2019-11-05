@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 install.packages("pacman")
 pacman::p_load(tidyverse, AzureStor,glue)
 key ="BNOTTHEREALKEYFORSTORAGE==" # set this and use with glue below. get from: Y:\Data\TfNSW\1_data\blob\train-occupancy-feb-2017.txt
-key="Xpvem==" #DELETED
+key="Xpve==" #DELETED
 ```
 
 
@@ -81,6 +81,7 @@ safety <-readr::read_csv("~/htidymodels/safety.csv", col_types = cols(    #impor
 ))
 
 sparklyr::sdf_copy_to(sc,safety) # copies R object into spark.
+src_tbls(sc) # shows safety table is now on the spark cluster
 
 cont2 <- storage_container(bl_endp_key, "trains-ae-riskdiv-opaltrainoccupancy-test-csv")
 storage_download(cont2, "/train-occupancy-feb-2017.csv", "~/htidymodels/trains-ae-riskdiv-opaltrainoccupancy-test.csv")

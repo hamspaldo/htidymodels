@@ -101,6 +101,12 @@ safetyvroom <-vroom::vroom("~/htidymodels/safety.csv", col_types = cols(    #imp
   `Network Maint. - Primary Rail Infrastructure Manager` = col_double()
 ))
 
+
+# try data.table
+p_load("data.table")
+safetyvfread <-data.table::fread("~/htidymodels/safety.csv")
+
+
 sparklyr::sdf_copy_to(sc,safety) # copies R object into spark.
 src_tbls(sc) # shows safety table is now on the spark cluster
 
@@ -126,7 +132,11 @@ opaltrainoccupancy <- readr::read_csv("~/htidymodels/trains-ae-riskdiv-opaltrain
 
 sparklyr::sdf_copy_to(sc,opaltrainoccupancy) # copies R object into spark. Alternative: sparklyr::copy_to(sc, opaltrainoccupancy, overwrite = TRUE)
 
-
+#p_load(arrow)
+#arrow::install_arrow() # to install arrow runtime libraries
+#arrow::write_feather(safety, "~/htidymodels/safety.feather") # doesn't work as need C++ libraries..https://arrow.apache.org/install/
+#safetyarrow <- arrow::write_feather("~/htidymodels/safety.feather")
+#safetyarrow <- arrow::read_feather("~/htidymodels/safety.feather")
 
 src_tbls(sc)
 
@@ -137,7 +147,7 @@ src_tbls(sc)
 ```
 
 
-# rbanchmark
+# rbanchmarks: readr::read_csv() vs vroom::vroom() vs data.table::fread()
 
 ```{r}
 
@@ -184,6 +194,10 @@ benchmark("readr" = {
         `Network Maint. - Rail Infrastructure Maintainer` = col_double(),
         `Network Maint. - Primary Rail Infrastructure Manager` = col_double()
       ))
+      },
+      "fread" ={
+        safetyvfread <-data.table::fread("~/htidymodels/safety.csv") # https://rdatatable.gitlab.io/data.table/index.html
+        # https://h2oai.github.io/db-benchmark/
       }
 )
 
@@ -209,6 +223,117 @@ bind_rows(origin.df,dest.df) %>%
 
 
 ```
+
+# what data to model
+
+Will try to merge **safety** incident data on to **Opal** data on station
+- when combining source and destination on opal data there are 78 unique stations 
+- here we see that merging the two data sets in R is too large.
+
+```{r}
+names(opaltrainoccupancy)
+glimpse(opaltrainoccupancy)
+unique(opaltrainoccupancy$day) # 28 days of data
+opaltrainoccupancy$Actual.Stop.Station
+opaltrainoccupancy$`Occupancy Range`
+opaltrainoccupancy$`Occupancy Status`
+opaltrainoccupancy$Actual.Stop.Station
+
+safetysnake <-janitor::clean_names(safety,case = c("snake")) %>%
+  dplyr::rename(orig_station = location_name)
+
+#glimpse(safetysnake)
+#unique(safetysnake$location_name)
+
+library(pacman)
+p_load(janitor)
+opal<-janitor::clean_names(opaltrainoccupancy,case = c("snake"))
+names(opal)
+glimpse(opal)
+ggplot2::ggplot(data = opaltrainoccupancy) + aes(x=day, y=actual_stop_station)
+
+ggplot(data = opaltrainoccupancy, aes(x = actual_station_arrv_time, y = continuousvar))+
+  geom_line(color = "#00AFBB", size = 2)
+
+```
+
+work out which stations have the highest occupancy and how this relates to the count of safety incidents
+
+merge safetysnake and opal by station
+```{r}
+
+opal %>% dplyr::left_join(safetysnake, by= "orig_station") # Error: cannot allocate vector of size 5.8 Gb
+
+```
+
+so Error: cannot allocate vector of size 5.8 Gb means that we have to use spark cluster..
+
+- both opaltrainoccupancy and safety are on the cluster..
+
+try using dplyr on cluster
+
+```{r}
+print(paste0("N Cores in use: ", sc$config$sparklyr.connect.cores.local))
+```
+
+```{r}
+src_tbls(sc)
+# create a reference to the spark tables in cache using the dplyr::tbl() function
+opaltrainoccupancy <- dplyr::tbl(sc,"opaltrainoccupancy")
+safety <- dplyr::tbl(sc,"safety")
+
+glimpse(opaltrainoccupancy)
+# of interest
+#opaltrainoccupancy$Actual.Stop.Station
+#opaltrainoccupancy$`Occupancy Range`
+#opaltrainoccupancy$`Occupancy Status`
+#opaltrainoccupancy$Actual.Stop.Station
+
+print(paste0("N Cores in use: ", sc$config$sparklyr.cores.local))
+
+opaltrainoccupancytest <- sparklyr::spark_apply(opaltrainoccupancy,
+                                      function(df) janitor::clean_names(df,case = c("snake"))
+                                      )
+
+opaltrainoccupancy%>%
+  sparklyr::spark_apply(function(e) head(e, 1))
+
+
+
+safetysnake <-janitor::clean_names(safety,case = c("snake")) %>%
+  dplyr::rename(orig_station = location_name)
+
+opal<-janitor::clean_names(opaltrainoccupancy,case = c("snake"))
+
+#glimpse(safetysnake)
+#unique(safetysnake$location_name)
+
+
+
+spark_apply(
+  iris_tbl,
+  function(e) broom::tidy(lm(Petal_Width ~ Petal_Length, e))
+)
+
+spark_apply(
+  safety,
+  function(e) janitor::clean_names(opaltrainoccupancy,case = c("snake"))
+)
+
+```
+
+
+try using sparklyr on cluster
+
+```{r}
+src_tbls(sc)
+
+## alternative using sparklyr:: check?
+opaltrainoccupancy <- sparklyr::tbl_cache(sc,"opaltrainoccupancy")
+```
+
+
+
 
 ## get some BOM data
 
